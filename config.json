@@ -1,0 +1,309 @@
+{
+  "id": "teldrive",
+  "name": { "zh": "Teldrive", "en": "Teldrive" },
+  "version": "0.3.0",
+  "entry": "main.wasm",
+  "description": {
+    "zh": "一键部署 teldrive、登录 Telegram、建频道与机器人、自动建远程并挂载",
+    "en": "Deploy teldrive, sign in to Telegram, create a channel and bots, then add and mount the remote"
+  },
+  "author": { "zh": "RCGUI", "en": "RCGUI" },
+  "tags": { "zh": ["teldrive", "网盘", "部署"], "en": ["teldrive", "cloud", "deploy"] },
+  "capabilities": ["kv", "fs", "http", "proc", "net", "rclone", "env"],
+  "platform": "windows",
+  "plugin_setting": {
+    "version": 2,
+    "summary": { "zh": "部署、登录、建频道与机器人、挂载", "en": "Deploy, sign in, channels and bots, mount" },
+    "controls": [
+      { "kind": "status", "key": "run", "label": { "zh": "当前状态", "en": "Status" }, "lamp": true },
+
+      { "kind": "group", "key": "g_dir", "label": { "zh": "① 部署位置", "en": "1. Install location" } },
+      {
+        "kind": "field",
+        "key": "root",
+        "label": { "zh": "数据目录", "en": "Data directory" },
+        "field": "path",
+        "placeholder": { "zh": "留空 = RCGUI 数据目录\\plugins\\teldrive", "en": "Empty = <RCGUI data>\\plugins\\teldrive" },
+        "dialog_title": { "zh": "选择 teldrive 数据目录", "en": "Choose the teldrive data directory" }
+      },
+      {
+        "kind": "field",
+        "key": "port",
+        "label": { "zh": "HTTP 端口", "en": "HTTP port" },
+        "field": "number",
+        "default": "8080"
+      },
+      {
+        "kind": "field",
+        "key": "pg_port",
+        "label": { "zh": "数据库端口", "en": "Database port" },
+        "field": "number",
+        "default": "5432"
+      },
+      { "kind": "hint", "key": "hint_svc", "label": { "zh": "说明", "en": "Note" }, "text": { "zh": "端口用于 teldrive 的 HTTP 服务，仅监听 127.0.0.1", "en": "teldrive listens on 127.0.0.1 only" } },
+
+      { "kind": "group", "key": "g_db", "label": { "zh": "② 数据库", "en": "2. Database" } },
+      {
+        "kind": "field",
+        "key": "db_mode",
+        "label": { "zh": "数据库方式", "en": "Database" },
+        "field": "select",
+        "options": [
+          { "value": "portable", "label": { "zh": "便携数据库（推荐）", "en": "Portable (recommended)" } },
+          { "value": "existing", "label": { "zh": "已有数据库", "en": "Existing server" } },
+          { "value": "docker", "label": { "zh": "Docker 容器", "en": "Docker container" } },
+          { "value": "auto", "label": { "zh": "自动", "en": "Automatic" } }
+        ],
+        "default": "portable"
+      },
+      {
+        "kind": "field",
+        "key": "db_url",
+        "label": { "zh": "连接串", "en": "Connection string" },
+        "field": "text",
+        "placeholder": { "zh": "postgres://postgres:密码@127.0.0.1:5432/teldrive?sslmode=disable", "en": "postgres://postgres:secret@127.0.0.1:5432/teldrive?sslmode=disable" }
+      },
+      { "kind": "hint", "key": "hint_db", "label": { "zh": "数据库选择", "en": "Database choice" }, "text": { "zh": "默认用「便携数据库」：自己下一个 22 MB 的 PostgreSQL 放在数据目录里，不需要你事先装任何东西。手边已经有 PostgreSQL（本机、服务器或云数据库）才改成「已有数据库」并把连接串贴上面", "en": "The default is Portable: it downloads a 22 MB PostgreSQL into the data directory, so nothing has to be installed beforehand. Switch to Existing server only when you already run PostgreSQL (local, on a server, or hosted) and paste its connection string above" } },
+
+      { "kind": "progress", "key": "progress" },
+      { "kind": "checks", "key": "checks", "label": { "zh": "检查项", "en": "Checks" }, "text": { "zh": "尚未校验", "en": "Not checked yet" } },
+      {
+        "kind": "field",
+        "key": "deployed_version",
+        "label": { "zh": "已部署版本", "en": "Deployed version" },
+        "field": "text",
+        "enabled": false
+      },
+      { "kind": "hint", "key": "hint_portable", "label": { "zh": "便携数据库说明", "en": "About the portable database" }, "text": { "zh": "便携版下载 22 MB、解压约 97 MB 到数据目录", "en": "The portable build downloads 22 MB and extracts about 97 MB into the data directory" } },
+
+      {
+        "kind": "action",
+        "key": "deploy",
+        "label": { "zh": "一键部署", "en": "Deploy" },
+        "style": "primary",
+        "line": "deploy-actions"
+      },
+      {
+        "kind": "action",
+        "key": "open_dir",
+        "label": { "zh": "打开目录", "en": "Open folder" },
+        "line": "deploy-actions"
+      },
+
+      { "kind": "divider" },
+
+      { "kind": "group", "key": "g_svc", "label": { "zh": "③ 服务", "en": "3. Service" } },
+      {
+        "kind": "action",
+        "key": "start",
+        "label": { "zh": "启动", "en": "Start" },
+        "style": "primary",
+        "line": "svc-actions"
+      },
+      {
+        "kind": "action",
+        "key": "stop",
+        "label": { "zh": "停止", "en": "Stop" },
+        "style": "danger",
+        "line": "svc-actions"
+      },
+
+      { "kind": "divider" },
+
+      { "kind": "group", "key": "g_login", "label": { "zh": "④ Telegram 登录", "en": "4. Telegram sign-in" } },
+      {
+        "kind": "action",
+        "key": "qr_start",
+        "label": { "zh": "扫码登录", "en": "Scan to sign in" },
+        "style": "primary",
+        "line": "qr-actions"
+      },
+      {
+        "kind": "action",
+        "key": "qr_poll",
+        "label": { "zh": "检查扫码结果", "en": "Check scan" },
+        "line": "qr-actions"
+      },
+      { "kind": "hint", "key": "hint_qr", "label": { "zh": "扫码", "en": "QR code" }, "text": { "zh": "点「扫码登录」，二维码就直接显示在下面：手机 Telegram → 设置 → 设备 → 链接桌面设备 扫码。还没确认时点「检查扫码结果」，码会换新。下面的手机号登录仍然可用", "en": "Press Scan to sign in and the code shows up right below: on the phone use Telegram > Settings > Devices > Link Desktop Device. While it is not confirmed yet, press Check scan and a fresh code appears. The phone + code route below still works" } },
+      { "kind": "image", "key": "qr", "label": { "zh": "扫这个码", "en": "Scan this" } },
+      {
+        "kind": "field",
+        "key": "phone",
+        "label": { "zh": "手机号", "en": "Phone number" },
+        "field": "text",
+        "placeholder": { "zh": "+8613800138000", "en": "+8613800138000" }
+      },
+      {
+        "kind": "field",
+        "key": "code",
+        "label": { "zh": "验证码", "en": "Login code" },
+        "field": "text"
+      },
+      {
+        "kind": "field",
+        "key": "password",
+        "label": { "zh": "两步验证密码", "en": "Two-step password" },
+        "field": "password",
+        "placeholder": { "zh": "只在开启了两步验证时才用", "en": "Only needed when two-step verification is on" }
+      },
+      { "kind": "hint", "key": "hint_login", "label": { "zh": "说明", "en": "Note" }, "text": { "zh": "填国际格式手机号，例如 +8613800138000。验证码会发到该账号的 Telegram 与短信", "en": "Use the international format, e.g. +8613800138000. The code arrives in Telegram and by SMS" } },
+      {
+        "kind": "action",
+        "key": "login_start",
+        "label": { "zh": "发送验证码", "en": "Send code" },
+        "line": "login-actions"
+      },
+      {
+        "kind": "action",
+        "key": "login_verify",
+        "label": { "zh": "提交验证码", "en": "Submit code" },
+        "line": "login-actions"
+      },
+      {
+        "kind": "action",
+        "key": "login_password",
+        "label": { "zh": "提交两步密码", "en": "Submit password" },
+        "line": "login-actions"
+      },
+      {
+        "kind": "action",
+        "key": "logout",
+        "label": { "zh": "退出登录", "en": "Sign out" },
+        "line": "account-actions"
+      },
+
+      { "kind": "divider" },
+
+      { "kind": "group", "key": "g_channel", "label": { "zh": "⑤ 频道与机器人", "en": "5. Channel and bots" } },
+      {
+        "kind": "field",
+        "key": "channel_name",
+        "label": { "zh": "新频道名", "en": "New channel name" },
+        "field": "text",
+        "placeholder": { "zh": "例如 my-drive", "en": "e.g. my-drive" }
+      },
+      {
+        "kind": "action",
+        "key": "channel_create",
+        "label": { "zh": "创建频道", "en": "Create channel" },
+        "style": "primary",
+        "line": "ch-actions"
+      },
+      {
+        "kind": "field",
+        "key": "channel_id",
+        "label": { "zh": "已有频道", "en": "Existing channel" },
+        "field": "select",
+        "dynamic": true,
+        "placeholder": { "zh": "点「刷新频道」列出账号下的频道", "en": "Click Refresh channels to list them" }
+      },
+      {
+        "kind": "action",
+        "key": "channels_refresh",
+        "label": { "zh": "刷新频道", "en": "Refresh channels" },
+        "line": "ch-actions"
+      },
+      {
+        "kind": "action",
+        "key": "channel_use",
+        "label": { "zh": "使用该频道", "en": "Use this channel" },
+        "line": "ch-actions"
+      },
+      {
+        "kind": "field",
+        "key": "tokens",
+        "label": { "zh": "机器人 token", "en": "Bot tokens" },
+        "field": "multiline",
+        "placeholder": { "zh": "每行一个，最多 200 个", "en": "One per line, up to 200" }
+      },
+      { "kind": "hint", "key": "hint_bot", "label": { "zh": "说明", "en": "Note" }, "text": { "zh": "机器人需先在 @BotFather 里手动创建：发 /newbot 取名 → 复制 token → 每行一个粘贴到上面", "en": "Create bots in @BotFather first: /newbot, name it, copy the token, paste one per line above" } },
+      {
+        "kind": "action",
+        "key": "bot_add",
+        "label": { "zh": "添加机器人", "en": "Add bots" },
+        "line": "ch-actions"
+      },
+      { "kind": "hint", "key": "hint_bots", "label": { "zh": "机器人清单", "en": "Bot list" }, "text": { "zh": "还没拉取，点「刷新机器人」列出账号下的机器人", "en": "Not loaded yet — click Refresh bots to list them" } },
+      {
+        "kind": "action",
+        "key": "bots_refresh",
+        "label": { "zh": "刷新机器人", "en": "Refresh bots" },
+        "line": "ch-actions"
+      },
+      {
+        "kind": "field",
+        "key": "bot_id",
+        "label": { "zh": "删除哪一台", "en": "Remove which bot" },
+        "field": "select",
+        "dynamic": true,
+        "placeholder": { "zh": "先点「刷新机器人」", "en": "Refresh bots first" }
+      },
+      {
+        "kind": "action",
+        "key": "bot_delete",
+        "label": { "zh": "删除机器人", "en": "Remove bot" },
+        "style": "danger",
+        "line": "ch-actions"
+      },
+      { "kind": "hint", "key": "hint_bot_delete", "label": { "zh": "说明", "en": "Note" }, "text": { "zh": "只从 teldrive 的机器人池里移除，Telegram 上那个机器人本身不受影响", "en": "Removes it from the teldrive bot pool only; the bot itself stays in Telegram" } },
+
+      { "kind": "divider" },
+
+      { "kind": "group", "key": "g_proxy", "label": { "zh": "⑥ 传输代理", "en": "6. Transfer proxy" } },
+      {
+        "kind": "field",
+        "key": "proxy",
+        "label": { "zh": "代理地址", "en": "Proxy URL" },
+        "field": "text",
+        "placeholder": { "zh": "http://127.0.0.1:7890 或 socks5://…，留空则直连", "en": "http://127.0.0.1:7890 or socks5://…; empty means direct" }
+      },
+      { "kind": "hint", "key": "hint_proxy", "label": { "zh": "说明", "en": "Note" }, "text": { "zh": "写进 config.yaml 的 telegram.proxy，只影响 teldrive 与 Telegram 之间的传输。点「应用代理」会重启服务，数据库不受影响", "en": "Goes into telegram.proxy in config.yaml and affects only teldrive's traffic to Telegram. Apply restarts the service; the database is untouched" } },
+      {
+        "kind": "action",
+        "key": "proxy_apply",
+        "label": { "zh": "应用代理", "en": "Apply proxy" },
+        "line": "proxy-actions"
+      },
+
+      { "kind": "divider" },
+
+      { "kind": "group", "key": "g_remote", "label": { "zh": "⑦ 远程与挂载", "en": "7. Remote and mount" } },
+      {
+        "kind": "field",
+        "key": "name",
+        "label": { "zh": "远程名", "en": "Remote name" },
+        "field": "text",
+        "default": "teldrive"
+      },
+      {
+        "kind": "field",
+        "key": "drive",
+        "label": { "zh": "盘符", "en": "Drive letter" },
+        "field": "text",
+        "default": "T:",
+        "placeholder": { "zh": "T:", "en": "T:" }
+      },
+      {
+        "kind": "action",
+        "key": "remote_create",
+        "label": { "zh": "创建远程", "en": "Add remote" },
+        "style": "primary",
+        "line": "remote-actions"
+      },
+      {
+        "kind": "action",
+        "key": "mount",
+        "label": { "zh": "挂载", "en": "Mount" },
+        "style": "primary",
+        "line": "remote-actions"
+      },
+      {
+        "kind": "action",
+        "key": "unmount",
+        "label": { "zh": "卸载", "en": "Unmount" },
+        "style": "danger",
+        "line": "remote-actions"
+      }
+    ]
+  }
+}
