@@ -22,10 +22,18 @@ pub fn set_lang(lang: Option<&str>) {
 
 fn lookup(key: &str) -> Option<String> {
     let root = table();
-    let primary = if LANG.load(Ordering::Relaxed) == 1 { "en" } else { "zh" };
+    let primary = if LANG.load(Ordering::Relaxed) == 1 {
+        "en"
+    } else {
+        "zh"
+    };
     let fallback = if primary == "en" { "zh" } else { "en" };
     for name in [primary, fallback] {
-        if let Some(v) = root.get(name).and_then(|m| m.get(key)).and_then(|v| v.as_str()) {
+        if let Some(v) = root
+            .get(name)
+            .and_then(|m| m.get(key))
+            .and_then(|v| v.as_str())
+        {
             return Some(v.to_string());
         }
     }

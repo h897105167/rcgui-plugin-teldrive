@@ -24,7 +24,9 @@ pub fn nonce() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0);
-    now ^ SEQ.fetch_add(1, Ordering::Relaxed).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+    now ^ SEQ
+        .fetch_add(1, Ordering::Relaxed)
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }
 
 /// teldrive 认的三种凭证。
@@ -131,7 +133,9 @@ pub fn err_text(r: &Reply) -> String {
 /// v4 形状的 UUID 字符串。np 里没有随机数，用调用方给的计数器混一下——
 /// 只要求每次不同，不需要密码学强度（它只是防重复提交）。
 pub fn idem(nonce: u64) -> String {
-    let mut x = nonce.wrapping_mul(0x9E37_79B9_7F4A_7C15).wrapping_add(0x1234_5678_9ABC_DEF0);
+    let mut x = nonce
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(0x1234_5678_9ABC_DEF0);
     let mut next = || {
         x ^= x << 13;
         x ^= x >> 7;

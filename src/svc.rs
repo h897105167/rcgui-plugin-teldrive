@@ -36,19 +36,23 @@ fn pg_handle_of(kv: &Value) -> String {
 
 /// 收掉“已在跑的那一个”teldrive 进程，供改完配置后重启用。
 ///
-/// 先按 kv 里的 pid 杀：宿主重启后它的进程句柄表是空的，`proc.stop` 拿着上次
-/// 会话的句柄只会报错，而进程因为 `keep_on_exit` 还活着。pid 没有才退回句柄。
-/// 两条路都不通时返回 None，调用方据此提示用户手动处理。
+/// 句柄还在就交给宿主停；句柄随宿主重启丢了，才按 kv 里的 pid 去核对着停
+/// （`kill_need` 会先确认那个 pid 确实是本插件的 exe）。两条路都不通时返回
+/// None，调用方据此提示用户手动处理。
 pub(crate) fn stop_need(kv: &Value, p: &Paths) -> Option<Value> {
+    let handle = handle_of(kv);
+    if !handle.is_empty() {
+        return Some(need_item(
+            "proc.stop",
+            "stopped",
+            json!({ "handle": handle }),
+        ));
+    }
     let pid = pid_of(kv, "proc");
     if pid > 0 {
-        return Some(kill_need("stopped", pid, &p.log_file));
+        return Some(kill_need("stopped", pid, &p.teldrive_exe(), &p.log_file));
     }
-    let handle = handle_of(kv);
-    if handle.is_empty() {
-        return None;
-    }
-    Some(need_item("proc.stop", "stopped", json!({ "handle": handle })))
+    None
 }
 
 /// `net.port_open` 的结果。没拿到就当端口没开。
@@ -106,24 +110,36 @@ fn panel(kv: &Value, port: u16, exe: bool, cfg: bool, running: bool, pg_open: bo
     };
 
     let mut values = serde_json::Map::new();
+    let ver = {
+        let v = s(kv_state(kv).get("version"));
+        if v.is_empty() {
+            TELDRIVE_VER.to_string()
+        } else {
+            v
+        }
+    };
     if exe {
         values.insert("port".into(), json!(port));
-        let ver = {
-            let v = s(kv_state(kv).get("version"));
-            if v.is_empty() {
-                TELDRIVE_VER.to_string()
-            } else {
-                v
-            }
-        };
-        values.insert("deployed_version".into(), json!(ver));
+        values.insert("deployed_version".into(), json!(ver.clone()));
     }
+    // 维护页：当前版本永远显示；latest_version 只在用户点过「检查新版本」之后有值，
+    // 升级按钮也只在「上游确实更新 + 拿到了可信校验值」时才亮。
+    values.insert("cur_version".into(), json!(ver.clone()));
+    let upd = kv_state(kv).get("upd").cloned().unwrap_or(Value::Null);
+    let latest = s(upd.get("latest"));
+    let trusted = upd
+        .get("trusted")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    values.insert("latest_version".into(), json!(latest));
+    let can_update = exe && trusted && crate::update::ver_gt(&latest, &ver);
 
     let mut checks = vec![
         json!({ "label": t("deploy.file.teldrive"), "value": exe_file, "ok": exe }),
         json!({ "label": "config.yaml", "value": cfg_file, "ok": cfg }),
         json!({ "label": f(&t("svc.running"), &[&port.to_string()]), "value": "", "ok": running }),
-    ];    if uses_portable_db(kv) {
+    ];
+    if uses_portable_db(kv) {
         // 便携库是本插件的责任：和 teldrive 一样列出来，端口通不通一眼能看到。
         let pg_port = pg_port_of(kv);
         checks.push(json!({
@@ -156,6 +172,10 @@ fn panel(kv: &Value, port: u16, exe: bool, cfg: bool, running: bool, pg_open: bo
             "login_verify": !logged && !flow.is_empty() && !need_pw,
             "login_password": !logged && need_pw,
             "logout": logged,
+            // 维护页：没装 teldrive 就没什么可查、可升级的；升级还要求上游确有新版
+            // 且拿到了官方校验值——两个条件缺一个就把按钮压灰，而不是点了才报错。
+            "check_update": exe,
+            "update": can_update,
         }
     });
     // 频道下拉、机器人清单、登录后隐藏 ④ 段这些两个面板都要一致：
@@ -274,7 +294,11 @@ pub fn on_start(id: u64, rq: &Rq) -> Value {
                     need_item("fs.meta", "exe", json!({ "path": p.teldrive_exe() })),
                     // 探端口就知道服务还在不在：RCGUI 重启后宿主进程表是空的，
                     // kv 里留下的句柄查不出真实状态，而进程本身可能还活着。
-                    need_item("net.port_open", "topen", json!({ "port": port, "timeout_ms": 500 })),
+                    need_item(
+                        "net.port_open",
+                        "topen",
+                        json!({ "port": port, "timeout_ms": 500 }),
+                    ),
                 ],
             )
         }
@@ -376,7 +400,12 @@ pub fn on_start(id: u64, rq: &Rq) -> Value {
                 return fail(id, &f(&t("svc.start_fail"), &[&e]));
             }
             let proc = got(&rq.provided, "proc");
-            if proc.get("handle").and_then(|v| v.as_str()).unwrap_or("").is_empty() {
+            if proc
+                .get("handle")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .is_empty()
+            {
                 // proc.start 没给句柄：说明它已经退出了，后面的 status 查不到。
                 let (p, _) = ctx(&kv);
                 return fail(id, &f(&t("svc.instant_exit"), &[&p.log_file]));
@@ -458,18 +487,25 @@ pub fn on_start(id: u64, rq: &Rq) -> Value {
     }
 }
 
-/// 句柄随宿主重启丢了之后，按 pid 结束整棵进程树。
+/// 句柄随宿主重启丢了之后，按 kv 里记的 pid 收掉残留进程。
 ///
-/// `taskkill` 自己会退出，所以能用捕获型 `proc.run`；但 pid 早就不存在时它会
-/// 以非 0 退出，这里的调用方（停止流程）本来就不看这个错。
-fn kill_need(key: &str, pid: u64, log: &str) -> Value {
+/// pid 是上次会话记下的，号码可能已经被无关进程复用，所以先用一次 PowerShell
+/// 核对这个 pid 的映像路径：确实是本插件的程序才结束它，否则回 `SKIP` 什么都不做。
+/// 认错一次就会杀掉别人的进程，代价远大于多一次 `proc.run`。
+fn kill_need(key: &str, pid: u64, exe: &str, log: &str) -> Value {
+    let script = format!(
+        "$p = Get-CimInstance Win32_Process -Filter 'ProcessId={pid}' -ErrorAction SilentlyContinue; \
+         if ($p -and ($p.ExecutablePath -ieq '{exe}')) {{ \
+             taskkill.exe /PID {pid} /T /F | Out-Null; 'KILLED' \
+         }} else {{ 'SKIP' }}"
+    );
     need_item(
-        "proc.start",
+        "proc.run",
         key,
         json!({
-            "program": "taskkill.exe",
-            "args": ["/PID", pid.to_string(), "/T", "/F"],
-            "silent": true,
+            "program": "powershell.exe",
+            "args": ["-NoProfile", "-NonInteractive", "-Command", script],
+            "timeout_ms": 20000,
             "log": log,
         }),
     )
@@ -525,12 +561,12 @@ pub fn on_stop(id: u64, rq: &Rq) -> Value {
             if !h.is_empty() {
                 list.push(need_item("proc.stop", "stop", json!({ "handle": h })));
             } else if tpid > 0 {
-                list.push(kill_need("stop", tpid, &p.log_file));
+                list.push(kill_need("stop", tpid, &p.teldrive_exe(), &p.log_file));
             }
             if !pgh.is_empty() {
                 list.push(need_item("proc.stop", "pgstop", json!({ "handle": pgh })));
             } else if gpid > 0 {
-                list.push(kill_need("pgstop", gpid, &p.log_file));
+                list.push(kill_need("pgstop", gpid, &p.pg_exe(), &p.log_file));
             }
             need(id, json!({ "step": "report", "kv": kv }), list)
         }
@@ -575,7 +611,11 @@ pub fn on_open_dir(id: u64, rq: &Rq) -> Value {
             need(
                 id,
                 json!({ "step": "report" }),
-                vec![need_item("fs.open_dir", "opened", json!({ "path": p.root }))],
+                vec![need_item(
+                    "fs.open_dir",
+                    "opened",
+                    json!({ "path": p.root }),
+                )],
             )
         }
 

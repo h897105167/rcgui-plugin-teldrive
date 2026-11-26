@@ -30,6 +30,7 @@ mod qr;
 mod rc;
 mod store;
 mod svc;
+mod update;
 
 use serde_json::{json, Value};
 use std::io::{Read, Write};
@@ -48,8 +49,8 @@ fn main() {
 }
 
 fn handle(input: &[u8]) -> Result<Value, String> {
-    let req: Value = serde_json::from_slice(input)
-        .map_err(|e| i18n::f("req.parse", &[&e.to_string()]))?;
+    let req: Value =
+        serde_json::from_slice(input).map_err(|e| i18n::f("req.parse", &[&e.to_string()]))?;
     let id = req.get("id").and_then(|v| v.as_u64()).unwrap_or(1);
     let method = s(req.get("method"));
     let params = req.get("params").cloned().unwrap_or(Value::Null);
@@ -69,7 +70,7 @@ fn handle(input: &[u8]) -> Result<Value, String> {
     }
 }
 
-fn dispatch(id: u64, p: &Value) -> Value {
+pub(crate) fn dispatch(id: u64, p: &Value) -> Value {
     let action = s(p.get("action"));
     let rq = Rq {
         form: p.get("form").cloned().unwrap_or_else(|| json!({})),
@@ -113,10 +114,17 @@ fn dispatch(id: u64, p: &Value) -> Value {
         "mount" => rc::on_mount(id, &rq),
         "unmount" => rc::on_unmount(id, &rq),
 
+        // 维护：查上游版本、把本插件装的 teldrive 换成新版
+        "check_update" => update::on_check(id, &rq),
+        "update" => update::on_update(id, &rq),
+
         // 宿主传来的动作名不在上表：多半是 config.json 与代码不同步，直接说出来。
         other => proto::fail(
             id,
-            &i18n::f("action.unknown", &[if other.is_empty() { "(空)" } else { other }]),
+            &i18n::f(
+                "action.unknown",
+                &[if other.is_empty() { "(空)" } else { other }],
+            ),
         ),
     }
 }

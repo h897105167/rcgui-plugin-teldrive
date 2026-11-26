@@ -46,41 +46,57 @@ const MAX_PG_ZIP: u64 = 40 * 1024 * 1024;
 /// （它只读系统随机源生成两把密钥，不依赖任何解包结果）。
 fn find_list(p: &Paths) -> Vec<Value> {
     vec![
-        need_item("fs.find", "f1", json!({
-            "dir": format!("{}\\teldrive", p.tmp),
-            "name": "teldrive.exe",
-            "max_depth": 6
-        })),
-        need_item("fs.find", "f2", json!({
-            "dir": format!("{}\\rclone", p.tmp),
-            "name": "rclone.exe",
-            "max_depth": 6
-        })),
-        need_item("proc.run", "secret", json!({
-            "program": "powershell.exe",
-            "args": [
-                "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-File", p.secrets_script()
-            ],
-            "timeout_ms": 60000
-        })),
+        need_item(
+            "fs.find",
+            "f1",
+            json!({
+                "dir": format!("{}\\teldrive", p.tmp),
+                "name": "teldrive.exe",
+                "max_depth": 6
+            }),
+        ),
+        need_item(
+            "fs.find",
+            "f2",
+            json!({
+                "dir": format!("{}\\rclone", p.tmp),
+                "name": "rclone.exe",
+                "max_depth": 6
+            }),
+        ),
+        need_item(
+            "proc.run",
+            "secret",
+            json!({
+                "program": "powershell.exe",
+                "args": [
+                    "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                    "-File", p.secrets_script()
+                ],
+                "timeout_ms": 60000
+            }),
+        ),
     ]
 }
 
 /// 起 teldrive 本体：端口已经通了之后的一步。
 fn run_need(id: u64, st: Value, p: &Paths) -> Value {
     let st = keep(st, "step", json!("run"));
-    let list = vec![need_item("proc.start", "start", json!({
-        "program": p.teldrive_exe(),
-        "args": ["run", "--config", p.cfg],
-        "cwd": p.root,
-        // silent=true 时宿主用 CREATE_NO_WINDOW 起进程，不弹控制台窗口；
-        // 同时必须给 log，否则 teldrive 的输出会被丢掉。
-        "silent": true,
-        "log": p.log_file,
-        // 部署完就把服务交给用户：退出 RCGUI 不该把刚起好的服务带走。
-        "keep_on_exit": true
-    }))];
+    let list = vec![need_item(
+        "proc.start",
+        "start",
+        json!({
+            "program": p.teldrive_exe(),
+            "args": ["run", "--config", p.cfg],
+            "cwd": p.root,
+            // silent=true 时宿主用 CREATE_NO_WINDOW 起进程，不弹控制台窗口；
+            // 同时必须给 log，否则 teldrive 的输出会被丢掉。
+            "silent": true,
+            "log": p.log_file,
+            // 部署完就把服务交给用户：退出 RCGUI 不该把刚起好的服务带走。
+            "keep_on_exit": true
+        }),
+    )];
     need(id, st, list)
 }
 
@@ -96,7 +112,19 @@ fn is_open(provided: &Value, key: &str) -> bool {
 ///
 /// `pgproc` 是便携数据库进程的句柄（外部数据库时为 null）：停库要用它，
 /// 所以要跟着 teldrive 的句柄一起留在 kv 里。
-fn finish(id: u64, kv: &Value, root: &str, port: u16, pgport: u16, mode: &str, db_url: &str, proxy: &str, secret: &(String, String), proc: &Value, pgproc: &Value) -> Value {
+fn finish(
+    id: u64,
+    kv: &Value,
+    root: &str,
+    port: u16,
+    pgport: u16,
+    mode: &str,
+    db_url: &str,
+    proxy: &str,
+    secret: &(String, String),
+    proc: &Value,
+    pgproc: &Value,
+) -> Value {
     let ops = vec![state_op(kv, |st| {
         st.insert("root".into(), json!(root));
         st.insert("port".into(), json!(port));
@@ -136,12 +164,20 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
             let list = vec![
                 need_item("env.info", "env", json!({})),
                 need_item("kv.get_all", "kv", json!({})),
-                need_item("net.port_open", "pgopen", json!({ "port": pgport, "timeout_ms": 800 })),
-                need_item("proc.run", "docker", json!({
-                    "program": "docker.exe",
-                    "args": ["--version"],
-                    "timeout_ms": 15000
-                })),
+                need_item(
+                    "net.port_open",
+                    "pgopen",
+                    json!({ "port": pgport, "timeout_ms": 800 }),
+                ),
+                need_item(
+                    "proc.run",
+                    "docker",
+                    json!({
+                        "program": "docker.exe",
+                        "args": ["--version"],
+                        "timeout_ms": 15000
+                    }),
+                ),
             ];
             need(id, json!({ "step": "prep" }), list)
         }
@@ -152,7 +188,10 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
             }
             let env = got(&rq.provided, "env");
             let data_dir = s(env.get("data_dir"));
-            let elevated = env.get("elevated").and_then(|v| v.as_bool()).unwrap_or(false);
+            let elevated = env
+                .get("elevated")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let p = Paths::resolve(&data_dir, &fstr(form, "root"));
             let port = fnum(form, "port", 8080);
             let pgport = fnum(form, "pg_port", 5432);
@@ -211,35 +250,59 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
                 need_item("fs.mkdir", "mk_tmp", json!({ "path": p.tmp })),
                 need_item("fs.mkdir", "mk_scripts", json!({ "path": p.scripts })),
                 need_item("fs.mkdir", "mk_logs", json!({ "path": p.logs })),
-                need_item("fs.write_text", "w_secrets", json!({
-                    "path": p.secrets_script(),
-                    "text": cfg::secrets_script()
-                })),
-                need_item("fs.write_text", "w_pg", json!({
-                    "path": p.pg_script(),
-                    "text": cfg::pg_script(&p.pg_bin(), &p.pgdata)
-                })),
-                need_item("http.download", "dl1", json!({
-                    "url": TELDRIVE_URL,
-                    "dest": format!("{}\\teldrive.zip", p.tmp),
-                    "max_bytes": MAX_TELDRIVE_ZIP
-                })),
-                need_item("http.download", "dl2", json!({
-                    "url": RCLONE_URL,
-                    "dest": format!("{}\\rclone.zip", p.tmp),
-                    "max_bytes": MAX_RCLONE_ZIP
-                })),
+                need_item(
+                    "fs.write_text",
+                    "w_secrets",
+                    json!({
+                        "path": p.secrets_script(),
+                        "text": cfg::secrets_script()
+                    }),
+                ),
+                need_item(
+                    "fs.write_text",
+                    "w_pg",
+                    json!({
+                        "path": p.pg_script(),
+                        "text": cfg::pg_script(&p.pg_bin(), &p.pgdata)
+                    }),
+                ),
+                need_item(
+                    "http.download",
+                    "dl1",
+                    json!({
+                        "url": TELDRIVE_URL,
+                        "dest": format!("{}\\teldrive.zip", p.tmp),
+                        "max_bytes": MAX_TELDRIVE_ZIP
+                    }),
+                ),
+                need_item(
+                    "http.download",
+                    "dl2",
+                    json!({
+                        "url": RCLONE_URL,
+                        "dest": format!("{}\\rclone.zip", p.tmp),
+                        "max_bytes": MAX_RCLONE_ZIP
+                    }),
+                ),
             ];
             if mode == "portable" {
                 // tar 要往这个目录里解，先建出来；jar 本身解到 p.pg。
-                list.push(need_item("fs.mkdir", "mk_pgsql", json!({
-                    "path": format!("{}\\pgsql", p.pg)
-                })));
-                list.push(need_item("http.download", "dl3", json!({
-                    "url": PG_URL,
-                    "dest": format!("{}\\pg.jar", p.tmp),
-                    "max_bytes": MAX_PG_ZIP
-                })));
+                list.push(need_item(
+                    "fs.mkdir",
+                    "mk_pgsql",
+                    json!({
+                        "path": format!("{}\\pgsql", p.pg)
+                    }),
+                ));
+                list.push(need_item(
+                    "http.download",
+                    "dl3",
+                    json!({
+                        "url": PG_URL,
+                        "dest": format!("{}\\pg.jar", p.tmp),
+                        "max_bytes": MAX_PG_ZIP
+                    }),
+                ));
             }
 
             let st = json!({
@@ -267,20 +330,32 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
             let p = Paths::new(&state_s(&rq.state, "root"));
             let mode = state_s(&rq.state, "mode");
             let mut list = vec![
-                need_item("fs.unzip", "u1", json!({
-                    "zip": format!("{}\\teldrive.zip", p.tmp),
-                    "dest": format!("{}\\teldrive", p.tmp)
-                })),
-                need_item("fs.unzip", "u2", json!({
-                    "zip": format!("{}\\rclone.zip", p.tmp),
-                    "dest": format!("{}\\rclone", p.tmp)
-                })),
+                need_item(
+                    "fs.unzip",
+                    "u1",
+                    json!({
+                        "zip": format!("{}\\teldrive.zip", p.tmp),
+                        "dest": format!("{}\\teldrive", p.tmp)
+                    }),
+                ),
+                need_item(
+                    "fs.unzip",
+                    "u2",
+                    json!({
+                        "zip": format!("{}\\rclone.zip", p.tmp),
+                        "dest": format!("{}\\rclone", p.tmp)
+                    }),
+                ),
             ];
             if mode == "portable" {
-                list.push(need_item("fs.unzip", "u3", json!({
-                    "zip": format!("{}\\pg.jar", p.tmp),
-                    "dest": p.pg
-                })));
+                list.push(need_item(
+                    "fs.unzip",
+                    "u3",
+                    json!({
+                        "zip": format!("{}\\pg.jar", p.tmp),
+                        "dest": p.pg
+                    }),
+                ));
             }
             let st = keep(rq.state.clone(), "step", json!("unzip"));
             need(id, st, list)
@@ -289,7 +364,10 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
         "unzip" => {
             for (key, name) in [("u1", "teldrive"), ("u2", "rclone"), ("u3", "pg")] {
                 if let Some(e) = got_err(&rq.provided, key) {
-                    return fail(id, &format!("{}（{}）：{}", t("deploy.step.unzip"), name, e));
+                    return fail(
+                        id,
+                        &format!("{}（{}）：{}", t("deploy.step.unzip"), name, e),
+                    );
                 }
             }
             let p = Paths::new(&state_s(&rq.state, "root"));
@@ -297,14 +375,18 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
             if mode == "portable" {
                 // 便携数据库下来的是 jar，里面的 txz 还得用系统自带的 tar 再解一层。
                 // tar 必须等上一步 fs.unzip 落盘，所以只能排到这一轮。
-                let list = vec![need_item("proc.run", "pgx", json!({
-                    "program": "tar.exe",
-                    "args": [
-                        "-xf", format!("{}\\{}", p.pg, PG_TXZ),
-                        "-C", format!("{}\\pgsql", p.pg)
-                    ],
-                    "timeout_ms": 300000
-                }))];
+                let list = vec![need_item(
+                    "proc.run",
+                    "pgx",
+                    json!({
+                        "program": "tar.exe",
+                        "args": [
+                            "-xf", format!("{}\\{}", p.pg, PG_TXZ),
+                            "-C", format!("{}\\pgsql", p.pg)
+                        ],
+                        "timeout_ms": 300000
+                    }),
+                )];
                 let st = keep(rq.state.clone(), "step", json!("untar"));
                 return need(id, st, list);
             }
@@ -321,7 +403,11 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
                 return fail(id, &f(&t("deploy.untar_fail"), &[&e]));
             }
             if code != 0 {
-                let msg = if stderr.is_empty() { format!("tar.exe 退出码 {}", code) } else { truncate(&stderr, 300) };
+                let msg = if stderr.is_empty() {
+                    format!("tar.exe 退出码 {}", code)
+                } else {
+                    truncate(&stderr, 300)
+                };
                 return fail(id, &f(&t("deploy.untar_fail"), &[&msg]));
             }
             let p = Paths::new(&state_s(&rq.state, "root"));
@@ -347,30 +433,46 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
             let pgport = state_s(&rq.state, "pgport").parse::<u16>().unwrap_or(5432);
 
             let mut list = vec![
-                need_item("fs.copy", "c1", json!({ "from": teldrive, "to": p.teldrive_exe() })),
-                need_item("fs.copy", "c2", json!({ "from": rclone, "to": p.rclone_exe() })),
+                need_item(
+                    "fs.copy",
+                    "c1",
+                    json!({ "from": teldrive, "to": p.teldrive_exe() }),
+                ),
+                need_item(
+                    "fs.copy",
+                    "c2",
+                    json!({ "from": rclone, "to": p.rclone_exe() }),
+                ),
             ];
             if mode == "portable" {
-                list.push(need_item("proc.run", "pg", json!({
-                    "program": "powershell.exe",
-                    "args": [
-                        "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                        "-File", p.pg_script()
-                    ],
-                    "timeout_ms": 600000
-                })));
+                list.push(need_item(
+                    "proc.run",
+                    "pg",
+                    json!({
+                        "program": "powershell.exe",
+                        "args": [
+                            "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                            "-File", p.pg_script()
+                        ],
+                        "timeout_ms": 600000
+                    }),
+                ));
             } else if mode == "docker" {
-                list.push(need_item("proc.run", "pg", json!({
-                    "program": "docker.exe",
-                    "args": [
-                        "run", "-d", "--name", "teldrive-pg",
-                        "-e", "POSTGRES_PASSWORD=postgres",
-                        "-e", "POSTGRES_DB=teldrive",
-                        "-p", format!("127.0.0.1:{}:5432", pgport),
-                        "postgres:17-alpine"
-                    ],
-                    "timeout_ms": 180000
-                })));
+                list.push(need_item(
+                    "proc.run",
+                    "pg",
+                    json!({
+                        "program": "docker.exe",
+                        "args": [
+                            "run", "-d", "--name", "teldrive-pg",
+                            "-e", "POSTGRES_PASSWORD=postgres",
+                            "-e", "POSTGRES_DB=teldrive",
+                            "-p", format!("127.0.0.1:{}:5432", pgport),
+                            "postgres:17-alpine"
+                        ],
+                        "timeout_ms": 180000
+                    }),
+                ));
             }
 
             let st = keep(rq.state.clone(), "step", json!("secret"));
@@ -398,7 +500,10 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
                 let out = s(pg.get("stdout")) + &s(pg.get("stderr"));
                 let benign = out.contains("already in use") || out.contains("already exists");
                 if code != 0 && !benign {
-                    return fail(id, &format!("{}：{}", t("deploy.step.db"), truncate(&out, 300)));
+                    return fail(
+                        id,
+                        &format!("{}：{}", t("deploy.step.db"), truncate(&out, 300)),
+                    );
                 }
             }
 
@@ -414,7 +519,10 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
                 }
             }
             if hex.len() < 32 || b64.is_empty() {
-                return fail(id, &format!("{}：{}", t("deploy.step.secret"), truncate(&raw, 200)));
+                return fail(
+                    id,
+                    &format!("{}：{}", t("deploy.step.secret"), truncate(&raw, 200)),
+                );
             }
 
             let p = Paths::new(&state_s(&rq.state, "root"));
@@ -429,10 +537,14 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
             let st = keep(rq.state.clone(), "step", json!(next));
             let st = keep(st, "hex", json!(hex));
             let st = keep(st, "b64", json!(b64));
-            let list = vec![need_item("fs.write_text", "w_cfg", json!({
-                "path": p.cfg,
-                "text": text
-            }))];
+            let list = vec![need_item(
+                "fs.write_text",
+                "w_cfg",
+                json!({
+                    "path": p.cfg,
+                    "text": text
+                }),
+            )];
             need(id, st, list)
         }
 
@@ -447,23 +559,31 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
             let pgport = state_s(&rq.state, "pgport").parse::<u16>().unwrap_or(5432);
             let st = keep(rq.state.clone(), "step", json!("pgwait"));
             let list = vec![
-                need_item("proc.start", "pg", json!({
-                    "program": p.pg_exe(),
-                    "args": [
-                        "-D", p.pgdata,
-                        "-p", pgport.to_string(),
-                        "-c", "listen_addresses=127.0.0.1"
-                    ],
-                    "cwd": p.pg_bin(),
-                    "silent": true,
-                    "log": p.pg_log(),
-                    // 部署结束时用户可能马上关掉 RCGUI 去挂载，库必须留着。
-                    "keep_on_exit": true
-                })),
-                need_item("net.port_open", "open", json!({
-                    "port": pgport,
-                    "timeout_ms": 3000
-                })),
+                need_item(
+                    "proc.start",
+                    "pg",
+                    json!({
+                        "program": p.pg_exe(),
+                        "args": [
+                            "-D", p.pgdata,
+                            "-p", pgport.to_string(),
+                            "-c", "listen_addresses=127.0.0.1"
+                        ],
+                        "cwd": p.pg_bin(),
+                        "silent": true,
+                        "log": p.pg_log(),
+                        // 部署结束时用户可能马上关掉 RCGUI 去挂载，库必须留着。
+                        "keep_on_exit": true
+                    }),
+                ),
+                need_item(
+                    "net.port_open",
+                    "open",
+                    json!({
+                        "port": pgport,
+                        "timeout_ms": 3000
+                    }),
+                ),
             ];
             need(id, st, list)
         }
@@ -483,23 +603,41 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
                 return fail(id, &f(&t("deploy.pg_start_fail"), &[&e]));
             }
             let started = got(&rq.provided, "pg");
-            let st = keep(rq.state.clone(), "pgproc", json!({
-                "handle": s(started.get("handle")),
-                "pid": started.get("pid").cloned().unwrap_or(Value::Null)
-            }));
+            let st = keep(
+                rq.state.clone(),
+                "pgproc",
+                json!({
+                    "handle": s(started.get("handle")),
+                    "pid": started.get("pid").cloned().unwrap_or(Value::Null)
+                }),
+            );
             if open {
                 return run_need(id, st, &p);
             }
-            let tries = rq.state.get("pgtries").and_then(|v| v.as_u64()).unwrap_or(0);
+            let tries = rq
+                .state
+                .get("pgtries")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
             if tries >= 2 {
-                return fail(id, &f(&t("deploy.pg_not_ready"), &[&pgport.to_string(), &p.pg_log()]));
+                return fail(
+                    id,
+                    &f(
+                        &t("deploy.pg_not_ready"),
+                        &[&pgport.to_string(), &p.pg_log()],
+                    ),
+                );
             }
             let st = keep(st, "pgtries", json!(tries + 1));
             let st = keep(st, "step", json!("pgrecheck"));
-            let list = vec![need_item("net.port_open", "open", json!({
-                "port": pgport,
-                "timeout_ms": 5000
-            }))];
+            let list = vec![need_item(
+                "net.port_open",
+                "open",
+                json!({
+                    "port": pgport,
+                    "timeout_ms": 5000
+                }),
+            )];
             need(id, st, list)
         }
 
@@ -510,7 +648,13 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
             if is_open(&rq.provided, "open") {
                 return run_need(id, rq.state.clone(), &p);
             }
-            fail(id, &f(&t("deploy.pg_not_ready"), &[&pgport.to_string(), &p.pg_log()]))
+            fail(
+                id,
+                &f(
+                    &t("deploy.pg_not_ready"),
+                    &[&pgport.to_string(), &p.pg_log()],
+                ),
+            )
         }
 
         "cfg" => {
@@ -537,21 +681,21 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
                     "pid": started.get("pid").cloned().unwrap_or(Value::Null),
                 }),
             );
-            let list = vec![need_item("http.text", "health", json!({
-                "url": format!("http://127.0.0.1:{}/health/ready", port),
-                "timeout_ms": 8000
-            }))];
+            let list = vec![need_item(
+                "http.text",
+                "health",
+                json!({
+                    "url": format!("http://127.0.0.1:{}/health/ready", port),
+                    "timeout_ms": 8000
+                }),
+            )];
             need(id, st, list)
         }
 
         "health" => {
             let port = state_s(&rq.state, "port").parse::<u16>().unwrap_or(8080);
             let pgport = state_s(&rq.state, "pgport").parse::<u16>().unwrap_or(5432);
-            let tries = rq
-                .state
-                .get("tries")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
+            let tries = rq.state.get("tries").and_then(|v| v.as_u64()).unwrap_or(0);
             let health = got(&rq.provided, "health");
             let status = health.get("status").and_then(|v| v.as_u64()).unwrap_or(0);
             let text = s(health.get("body"));
@@ -616,15 +760,23 @@ pub fn on_deploy(id: u64, rq: &Rq) -> Value {
             // 没有 sleep 能力，用 ping 的两次间隔凑两秒，超时由 proc.run 兜底。
             let st = keep(rq.state.clone(), "tries", json!(tries + 1));
             let list = vec![
-                need_item("proc.run", "sleep", json!({
-                    "program": "cmd.exe",
-                    "args": ["/c", "ping -n 3 127.0.0.1 >nul"],
-                    "timeout_ms": 8000
-                })),
-                need_item("http.text", "health", json!({
-                    "url": format!("http://127.0.0.1:{}/health/ready", port),
-                    "timeout_ms": 8000
-                })),
+                need_item(
+                    "proc.run",
+                    "sleep",
+                    json!({
+                        "program": "cmd.exe",
+                        "args": ["/c", "ping -n 3 127.0.0.1 >nul"],
+                        "timeout_ms": 8000
+                    }),
+                ),
+                need_item(
+                    "http.text",
+                    "health",
+                    json!({
+                        "url": format!("http://127.0.0.1:{}/health/ready", port),
+                        "timeout_ms": 8000
+                    }),
+                ),
             ];
             need(id, st, list)
         }
