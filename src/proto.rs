@@ -82,8 +82,18 @@ pub fn fstr(form: &Value, key: &str) -> String {
 
 pub fn fnum(form: &Value, key: &str, def: u16) -> u16 {
     match form.get(key) {
-        Some(Value::Number(n)) => n.as_u64().filter(|v| *v > 0 && *v < 65536).map(|v| v as u16).unwrap_or(def),
-        Some(Value::String(v)) => v.trim().parse::<u32>().ok().filter(|v| *v > 0 && *v < 65536).map(|v| v as u16).unwrap_or(def),
+        Some(Value::Number(n)) => n
+            .as_u64()
+            .filter(|v| *v > 0 && *v < 65536)
+            .map(|v| v as u16)
+            .unwrap_or(def),
+        Some(Value::String(v)) => v
+            .trim()
+            .parse::<u32>()
+            .ok()
+            .filter(|v| *v > 0 && *v < 65536)
+            .map(|v| v as u16)
+            .unwrap_or(def),
         _ => def,
     }
 }

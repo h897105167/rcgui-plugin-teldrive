@@ -187,10 +187,7 @@ fn bots_text(kv: &Value) -> Option<String> {
     if list.is_empty() {
         return Some(format!("{}\n{}", t("bot.list_empty"), scope));
     }
-    let mut out = vec![
-        f(&t("bot.list_head"), &[&list.len().to_string()]),
-        scope,
-    ];
+    let mut out = vec![f(&t("bot.list_head"), &[&list.len().to_string()]), scope];
     for b in list {
         let username = s(b.get("username"));
         let id = s(b.get("id"));
@@ -627,7 +624,7 @@ pub fn on_qr_start(id: u64, rq: &Rq) -> Value {
             let state = api::pick(&r.json, &["state"]);
             let url = api::pick(&r.json, &["qrUrl", "qr_url"]);
             if flow_id.is_empty() {
-                return fail(id, &f("qr.fail", &[&api::err_text(&r) ]));
+                return fail(id, &f("qr.fail", &[&api::err_text(&r)]));
             }
             // 这个账号开了两步验证：服务端不导出二维码，直接要密码。把 flow 存下来，
             // 「提交两步密码」那条路就接得上。
@@ -934,7 +931,11 @@ pub fn on_bot_add(id: u64, rq: &Rq) -> Value {
             if list.is_empty() {
                 return fail(id, &t("bot.need_token"));
             }
-            let base = keep(keep(rq.state.clone(), "kv", kv.clone()), "tokens", json!(list));
+            let base = keep(
+                keep(rq.state.clone(), "kv", kv.clone()),
+                "tokens",
+                json!(list),
+            );
             if at.is_empty() {
                 // accessToken 过期了：先用 refreshToken 换一对新的，再发。
                 let need_http = refresh_need(port_of(&kv), &rt);
@@ -985,11 +986,7 @@ pub fn on_bot_add(id: u64, rq: &Rq) -> Value {
         // 先列 "bots"：它在 `_` 后面就永远到不了。match 里的顺序就是优先级。
         "bots" => {
             let kv = kv_of(rq);
-            let added = rq
-                .state
-                .get("added")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
+            let added = rq.state.get("added").and_then(|v| v.as_u64()).unwrap_or(0);
             let note = state_s(&rq.state, "note");
             let level = state_s(&rq.state, "level");
             let at = state_s(&rq.state, "at");
@@ -1326,10 +1323,18 @@ pub fn on_bots_refresh(id: u64, rq: &Rq) -> Value {
             if at.is_empty() && rt.is_empty() {
                 return fail(id, &t("login.need_login"));
             }
-            let base = keep(keep(rq.state.clone(), "kv", kv.clone()), "step", json!("report"));
+            let base = keep(
+                keep(rq.state.clone(), "kv", kv.clone()),
+                "step",
+                json!("report"),
+            );
             if at.is_empty() {
                 // accessToken 已经过期，手上还有 refreshToken：先换一对新的再列。
-                need(id, keep(base, "step", json!("refresh")), vec![refresh_need(port_of(&kv), &rt)])
+                need(
+                    id,
+                    keep(base, "step", json!("refresh")),
+                    vec![refresh_need(port_of(&kv), &rt)],
+                )
             } else {
                 need(id, base, vec![bots_need_of(&kv, &at)])
             }
@@ -1346,7 +1351,11 @@ pub fn on_bots_refresh(id: u64, rq: &Rq) -> Value {
             }
             // 服务端不一定换发新的 refreshToken，没给就沿用旧的，别把换票能力丢掉。
             let rt_new = s(r.json.get("refreshToken"));
-            let rt = if rt_new.is_empty() { refresh(&kv) } else { rt_new };
+            let rt = if rt_new.is_empty() {
+                refresh(&kv)
+            } else {
+                rt_new
+            };
             let http = bots_need_of(&kv, &at);
             let next = keep(keep(rq.state.clone(), "kv", kv), "step", json!("report"));
             let next = keep(keep(next, "at", json!(at)), "rt", json!(rt));
@@ -1430,7 +1439,11 @@ pub fn on_bot_delete(id: u64, rq: &Rq) -> Value {
             let Some((bid, bname)) = bot_pick(&kv, &label) else {
                 return fail(id, &t("bot.pick_first"));
             };
-            let base = keep(keep(rq.state.clone(), "kv", kv.clone()), "step", json!("del"));
+            let base = keep(
+                keep(rq.state.clone(), "kv", kv.clone()),
+                "step",
+                json!("del"),
+            );
             let base = keep(keep(base, "bid", json!(bid)), "bname", json!(bname));
             if at.is_empty() {
                 return need(
@@ -1453,10 +1466,18 @@ pub fn on_bot_delete(id: u64, rq: &Rq) -> Value {
                 return fail(id, &t("login.reauth"));
             }
             let rt_new = s(r.json.get("refreshToken"));
-            let rt = if rt_new.is_empty() { refresh(&kv) } else { rt_new };
+            let rt = if rt_new.is_empty() {
+                refresh(&kv)
+            } else {
+                rt_new
+            };
             let bid = state_s(&rq.state, "bid");
             let http = api::bot_delete_need("del", port_of(&kv), &bid, &Auth::Bearer(at.clone()));
-            let next = keep(keep(rq.state.clone(), "step", json!("del")), "at", json!(at));
+            let next = keep(
+                keep(rq.state.clone(), "step", json!("del")),
+                "at",
+                json!(at),
+            );
             let next = keep(next, "rt", json!(rt));
             need(id, next, vec![http])
         }
@@ -1518,7 +1539,11 @@ pub fn on_bot_delete(id: u64, rq: &Rq) -> Value {
                 }
             };
             let bname = state_s(&rq.state, "bname");
-            let next = keep(keep(rq.state.clone(), "step", json!("list")), "bname", json!(bname));
+            let next = keep(
+                keep(rq.state.clone(), "step", json!("list")),
+                "bname",
+                json!(bname),
+            );
             need(id, next, vec![bots_need_of(&kv, &at)])
         }
     }
@@ -1601,15 +1626,23 @@ pub fn on_proxy_apply(id: u64, rq: &Rq) -> Value {
                 return fail(id, &t("proxy.bad"));
             }
             let p = Paths::new(&root);
-            let st = keep(keep(rq.state.clone(), "step", json!("read")), "proxy", json!(proxy));
+            let st = keep(
+                keep(rq.state.clone(), "step", json!("read")),
+                "proxy",
+                json!(proxy),
+            );
             let st = keep(st, "kv", kv);
             need(
                 id,
                 st,
-                vec![need_item("fs.read_text", "cfgtext", json!({
-                    "path": p.cfg,
-                    "max_bytes": 1048576
-                }))],
+                vec![need_item(
+                    "fs.read_text",
+                    "cfgtext",
+                    json!({
+                        "path": p.cfg,
+                        "max_bytes": 1048576
+                    }),
+                )],
             )
         }
 
@@ -1626,9 +1659,17 @@ pub fn on_proxy_apply(id: u64, rq: &Rq) -> Value {
                 id,
                 keep(rq.state.clone(), "step", json!("write")),
                 vec![
-                    need_item("fs.write_text", "w_cfg", json!({ "path": p.cfg, "text": text })),
+                    need_item(
+                        "fs.write_text",
+                        "w_cfg",
+                        json!({ "path": p.cfg, "text": text }),
+                    ),
                     // 同一轮里顺便问端口：决定写完要不要重启服务。
-                    need_item("net.port_open", "topen", json!({ "port": port, "timeout_ms": 500 })),
+                    need_item(
+                        "net.port_open",
+                        "topen",
+                        json!({ "port": port, "timeout_ms": 500 }),
+                    ),
                 ],
             )
         }
@@ -1649,23 +1690,33 @@ pub fn on_proxy_apply(id: u64, rq: &Rq) -> Value {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             if !running {
-                return done(id, json!({
-                    "status": note,
-                    "lamp": "ok",
-                    "toast": { "level": "ok", "message": note },
-                }));
+                return done(
+                    id,
+                    json!({
+                        "status": note,
+                        "lamp": "ok",
+                        "toast": { "level": "ok", "message": note },
+                    }),
+                );
             }
             let p = Paths::new(&s(kv_state(&kv).get("root")));
             let Some(kill) = crate::svc::stop_need(&kv, &p) else {
                 // pid 与句柄都没有，谁都停不掉，只能让用户手点「停止」再「启动」。
                 let msg = t("proxy.no_handle");
-                return done(id, json!({
-                    "status": msg,
-                    "lamp": "warn",
-                    "toast": { "level": "warn", "message": msg },
-                }));
+                return done(
+                    id,
+                    json!({
+                        "status": msg,
+                        "lamp": "warn",
+                        "toast": { "level": "warn", "message": msg },
+                    }),
+                );
             };
-            need(id, keep(rq.state.clone(), "step", json!("start")), vec![kill])
+            need(
+                id,
+                keep(rq.state.clone(), "step", json!("start")),
+                vec![kill],
+            )
         }
 
         // 停旧进程那一步的结果不能当判断依据：pid 早就退掉时 taskkill 也返回非 0，
@@ -1675,10 +1726,14 @@ pub fn on_proxy_apply(id: u64, rq: &Rq) -> Value {
             need(
                 id,
                 keep(rq.state.clone(), "step", json!("verify")),
-                vec![need_item("net.port_open", "topen", json!({
-                    "port": port_of(&kv),
-                    "timeout_ms": 1500
-                }))],
+                vec![need_item(
+                    "net.port_open",
+                    "topen",
+                    json!({
+                        "port": port_of(&kv),
+                        "timeout_ms": 1500
+                    }),
+                )],
             )
         }
 
@@ -1727,4 +1782,3 @@ fn svc_step(id: u64, rq: &Rq, step: &str) -> Value {
     }
     v
 }
-

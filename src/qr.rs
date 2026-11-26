@@ -31,26 +31,126 @@ struct Spec {
 ///
 /// 数值取自 python-qrcode 的 `RS_BLOCK_TABLE`（M 行），与 ISO/IEC 18004 表 9 一致。
 const SPECS: [Spec; 20] = [
-    Spec { total: 26, data: 16, ecc: 10, blocks: 1 },
-    Spec { total: 44, data: 28, ecc: 16, blocks: 1 },
-    Spec { total: 70, data: 44, ecc: 26, blocks: 1 },
-    Spec { total: 100, data: 64, ecc: 18, blocks: 2 },
-    Spec { total: 134, data: 86, ecc: 24, blocks: 2 },
-    Spec { total: 172, data: 108, ecc: 16, blocks: 4 },
-    Spec { total: 196, data: 124, ecc: 18, blocks: 4 },
-    Spec { total: 242, data: 154, ecc: 22, blocks: 4 },
-    Spec { total: 292, data: 182, ecc: 22, blocks: 5 },
-    Spec { total: 346, data: 216, ecc: 26, blocks: 5 },
-    Spec { total: 404, data: 254, ecc: 30, blocks: 5 },
-    Spec { total: 466, data: 290, ecc: 22, blocks: 8 },
-    Spec { total: 532, data: 334, ecc: 22, blocks: 9 },
-    Spec { total: 581, data: 365, ecc: 24, blocks: 9 },
-    Spec { total: 655, data: 415, ecc: 24, blocks: 10 },
-    Spec { total: 733, data: 453, ecc: 28, blocks: 10 },
-    Spec { total: 815, data: 507, ecc: 28, blocks: 11 },
-    Spec { total: 901, data: 563, ecc: 26, blocks: 13 },
-    Spec { total: 991, data: 627, ecc: 26, blocks: 14 },
-    Spec { total: 1085, data: 669, ecc: 26, blocks: 16 },
+    Spec {
+        total: 26,
+        data: 16,
+        ecc: 10,
+        blocks: 1,
+    },
+    Spec {
+        total: 44,
+        data: 28,
+        ecc: 16,
+        blocks: 1,
+    },
+    Spec {
+        total: 70,
+        data: 44,
+        ecc: 26,
+        blocks: 1,
+    },
+    Spec {
+        total: 100,
+        data: 64,
+        ecc: 18,
+        blocks: 2,
+    },
+    Spec {
+        total: 134,
+        data: 86,
+        ecc: 24,
+        blocks: 2,
+    },
+    Spec {
+        total: 172,
+        data: 108,
+        ecc: 16,
+        blocks: 4,
+    },
+    Spec {
+        total: 196,
+        data: 124,
+        ecc: 18,
+        blocks: 4,
+    },
+    Spec {
+        total: 242,
+        data: 154,
+        ecc: 22,
+        blocks: 4,
+    },
+    Spec {
+        total: 292,
+        data: 182,
+        ecc: 22,
+        blocks: 5,
+    },
+    Spec {
+        total: 346,
+        data: 216,
+        ecc: 26,
+        blocks: 5,
+    },
+    Spec {
+        total: 404,
+        data: 254,
+        ecc: 30,
+        blocks: 5,
+    },
+    Spec {
+        total: 466,
+        data: 290,
+        ecc: 22,
+        blocks: 8,
+    },
+    Spec {
+        total: 532,
+        data: 334,
+        ecc: 22,
+        blocks: 9,
+    },
+    Spec {
+        total: 581,
+        data: 365,
+        ecc: 24,
+        blocks: 9,
+    },
+    Spec {
+        total: 655,
+        data: 415,
+        ecc: 24,
+        blocks: 10,
+    },
+    Spec {
+        total: 733,
+        data: 453,
+        ecc: 28,
+        blocks: 10,
+    },
+    Spec {
+        total: 815,
+        data: 507,
+        ecc: 28,
+        blocks: 11,
+    },
+    Spec {
+        total: 901,
+        data: 563,
+        ecc: 26,
+        blocks: 13,
+    },
+    Spec {
+        total: 991,
+        data: 627,
+        ecc: 26,
+        blocks: 14,
+    },
+    Spec {
+        total: 1085,
+        data: 669,
+        ecc: 26,
+        blocks: 16,
+    },
 ];
 
 /// 每个版本的对齐图形中心坐标（版本 1 没有对齐图形）。
@@ -108,8 +208,7 @@ pub fn png(text: &str) -> Option<Vec<u8>> {
 
 /// 标准 base64（带 `=` 补齐）。宿主 `fs.write_b64` 只收 base64 文本。
 pub fn b64(data: &[u8]) -> String {
-    const TABLE: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for group in data.chunks(3) {
         let b1 = group.get(1).copied().unwrap_or(0);
@@ -260,7 +359,11 @@ fn pick_version(len: usize) -> Option<usize> {
 fn data_bits(bytes: &[u8], version: usize, _spec: &Spec) -> Vec<bool> {
     let mut bits = Vec::with_capacity(bytes.len() * 8 + 20);
     push_bits(&mut bits, 0b0100, 4);
-    push_bits(&mut bits, bytes.len() as u32, if version <= 9 { 8 } else { 16 });
+    push_bits(
+        &mut bits,
+        bytes.len() as u32,
+        if version <= 9 { 8 } else { 16 },
+    );
     for b in bytes {
         push_bits(&mut bits, *b as u32, 8);
     }
@@ -433,7 +536,11 @@ fn place_finder(m: &mut [Vec<Option<bool>>], row: usize, col: usize) {
             }
             let dark = (0..=6).contains(&dr)
                 && (0..=6).contains(&dc)
-                && (dr == 0 || dr == 6 || dc == 0 || dc == 6 || ((2..=4).contains(&dr) && (2..=4).contains(&dc)));
+                && (dr == 0
+                    || dr == 6
+                    || dc == 0
+                    || dc == 6
+                    || ((2..=4).contains(&dr) && (2..=4).contains(&dc)));
             m[r as usize][c as usize] = Some(dark);
         }
     }
@@ -581,7 +688,11 @@ fn penalty(grid: &[Vec<bool>]) -> i32 {
         for horizontal in [true, false] {
             let mut run = 1i32;
             for j in 1..size {
-                let prev = if horizontal { grid[i][j - 1] } else { grid[j - 1][i] };
+                let prev = if horizontal {
+                    grid[i][j - 1]
+                } else {
+                    grid[j - 1][i]
+                };
                 let cur = if horizontal { grid[i][j] } else { grid[j][i] };
                 if cur == prev {
                     run += 1;
@@ -614,11 +725,15 @@ fn penalty(grid: &[Vec<bool>]) -> i32 {
         for j in 0..size.saturating_sub(6) {
             let ok_row = (0..7).all(|k| grid[i][j + k] == pat[k]);
             let ok_col = (0..7).all(|k| grid[j + k][i] == pat[k]);
-            if ok_row && ((j + 7..j + 11).all(|c| c >= size || !grid[i][c]) || (0..4).all(|k| j < k || !grid[i][j - k]))
+            if ok_row
+                && ((j + 7..j + 11).all(|c| c >= size || !grid[i][c])
+                    || (0..4).all(|k| j < k || !grid[i][j - k]))
             {
                 score += 40;
             }
-            if ok_col && ((j + 7..j + 11).all(|r| r >= size || !grid[r][i]) || (0..4).all(|k| j < k || !grid[j - k][i]))
+            if ok_col
+                && ((j + 7..j + 11).all(|r| r >= size || !grid[r][i])
+                    || (0..4).all(|k| j < k || !grid[j - k][i]))
             {
                 score += 40;
             }

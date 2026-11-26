@@ -76,6 +76,53 @@ pub fn on_remote_create(id: u64, rq: &Rq) -> Value {
             }
             need(
                 id,
+                json!({ "step": "prov", "kv": kv, "name": n }),
+                vec![need_item(
+                    "rclone.call",
+                    "prov",
+                    json!({ "method": "config/providers", "params": {} }),
+                )],
+            )
+        }
+
+        "prov" => {
+            let kv = rq.state.get("kv").cloned().unwrap_or(Value::Null);
+            let n = state_s(&rq.state, "name");
+            let key = api_key(&kv);
+            if let Some(e) = got_err(&rq.provided, "prov") {
+                return fail(id, &f(&t("remote.probe_fail"), &[&e]));
+            }
+            // 官方 rclone 没有 teldrive 后端。这里先问后端列表，是为了在创建之前
+            // 给出有出路的说法，而不是等 config/create 回一句 "unknown backend"。
+            let has_teldrive = got(&rq.provided, "prov")
+                .get("providers")
+                .and_then(|v| v.as_array())
+                .map(|list| {
+                    list.iter().any(|p| {
+                        let cap = s(p.get("Name"));
+                        let name = if cap.is_empty() {
+                            s(p.get("name"))
+                        } else {
+                            cap
+                        };
+                        name.eq_ignore_ascii_case("teldrive")
+                    })
+                })
+                .unwrap_or(false);
+            if !has_teldrive {
+                let tip = t("remote.no_backend_tip");
+                return done(
+                    id,
+                    json!({
+                        "status": t("remote.no_backend"),
+                        "lamp": "warn",
+                        "hints": { "hint_remote": tip },
+                        "toast": { "level": "warn", "message": tip },
+                    }),
+                );
+            }
+            need(
+                id,
                 json!({ "step": "report", "kv": kv, "name": n }),
                 vec![need_item(
                     "rclone.call",
@@ -143,10 +190,7 @@ pub fn on_mount(id: u64, rq: &Rq) -> Value {
             // 同一盘符上重复挂载会被 WinFsp 拒绝，先在插件侧挡掉，说法更具体。
             let mounted = st_s(&kv, "mount");
             if !mounted.is_empty() {
-                return fail(
-                    id,
-                    &f(&t("mount.already"), &[&mounted]),
-                );
+                return fail(id, &f(&t("mount.already"), &[&mounted]));
             }
             // 先问一句这个 rclone 有没有挂载实现。Windows 上缺 cmount 标签时
             // mount/mount 会报 "mount option specified is not registered"，那句话
