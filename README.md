@@ -138,6 +138,12 @@ src/proto.rs  need/ops 应答与 kv 读写
 src/i18n.rs   zh/en 文案
 ```
 
+## 在 GitHub 上构建
+
+`.github/workflows/ci.yml` 每次推送、每个 PR，以及每天 19:38 UTC（北京时间 03:38）都会跑一遍：格式、wasm 目标编译、测试、`config.json` 自检。依赖或 runner 镜像哪天变了，没人推代码也会在这里露出来。
+
+只要 zip、不想在本机装 Rust 与 wasm 目标：手动跑 **release**（`Actions` → `release` → `Run workflow`，选分支），产物是 artifact `plugin-package`，里面是 `dist/teldrive-<版本>.zip`。手动跑不会建 Release —— 那一步只对 `v*` tag 生效。
+
 ## 许可
 
 MIT，见 [LICENSE](LICENSE)。
